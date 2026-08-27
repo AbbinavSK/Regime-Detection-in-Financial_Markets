@@ -23,3 +23,6 @@ CLAUDE.md
 COMPILED.md
 LOGIC.md
 docs/
+
+# Not required on GitHub -- kept locally only
+data_visualisation.ipynb
