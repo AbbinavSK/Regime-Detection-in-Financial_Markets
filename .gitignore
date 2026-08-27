@@ -1,0 +1,20 @@
+# Pipeline artifacts -- regenerable by re-running the relevant stage (see CLAUDE.md)
+data/
+outputs/
+images/
+
+# Overleaf-synced report repo -- version-controlled separately via its own git remote
+report/
+
+# Supervisor-meeting scratch assets (large GIFs, unrelated PDFs) -- not part of the reproducible pipeline
+presentation/
+
+# Python bytecode cache
+__pycache__/
+*.pyc
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# Editor/workspace settings
+.vscode/
