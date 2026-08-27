@@ -1,35 +1,141 @@
-# Regime Detection in Financial Markets using ML
+# Regime Detection in Financial Markets using Machine Learning
 
-UCL MSc dissertation project: builds correlation-network representations of stock indices, embeds them via three competing descriptor methods (Graph2Vec, eigenvector centrality, spectral/RMT features), and clusters the embeddings (K-Means / Gaussian HMM) into market regimes — Calm / Transitional / Crisis — validated against VIX for the S&P 500. Four markets are covered: S&P 500, Nikkei 225, FTSE 350, CSI 300.
+UCL MSc Computational Finance dissertation project (Author: Abbinav Sankar Kailasam; Supervisors: Dr. Blaz
+Zlicar, Prof. Fabio Caccioli). This project asks whether the *shape* of the stock market's correlation
+structure — not just individual prices — can be used to detect market regimes (calm, transitional, crisis),
+and whether a sophisticated machine-learned representation of that structure is actually worth its cost.
 
-See [`LOGIC.md`](LOGIC.md) for *why* the pipeline is shaped this way (the research design, the 2×2 descriptor comparison, what's been checked and fixed). See [`docs/architecture/pipeline.md`](docs/architecture/pipeline.md) for *how the code is wired together* stage by stage. See [`docs/critical-evaluation.md`](docs/critical-evaluation.md) for what can currently be concluded from results this pipeline has produced, and what's still open. See [`CLAUDE.md`](CLAUDE.md) for a terser operational reference (commands, module map, conventions).
+## 1. The Research Question
 
-## Environment
+- **Surface question**: can market regimes be read off the evolving topology of a stock correlation network?
+- **The sharper question the project is actually designed to answer**: when you build an expensive, *learned*
+  graph representation (Graph2Vec) instead of a cheap, *deterministic* one (eigenvector centrality, or a
+  spectral/random-matrix-theory summary that skips graph-building entirely), does the extra complexity buy
+  you anything?
+- This is tested as a controlled 2×2 comparison — varying (a) whether the descriptor is learned or
+  handcrafted, and (b) whether it operates on a filtered graph or the raw correlation matrix directly — so
+  that any performance gap can be attributed to a specific design choice, not just "the fancier method won."
 
-Python runs from the conda **base** environment at `c:\Users\Abbin\miniconda3` (not a named env). Key packages: numpy, pandas, networkx, scipy, scikit-learn, hmmlearn, gensim, yfinance, joblib. No requirements.txt/environment.yml exists.
+## 2. Data
 
+- Four equity markets: **S&P 500, Nikkei 225, FTSE 350, CSI 300**. Daily adjusted closes, 2001–2026, via
+  `yfinance`.
+- A five-stage screen (non-positive prices → extreme return jumps → incomplete history → market-wide
+  non-trading days → prolonged trading halts) cleans each raw panel:
+
+  | Market | Scraped universe | Final panel size |
+  |---|---|---|
+  | S&P 500 | 503 | 349 |
+  | Nikkei 225 | 225 | 177 |
+  | FTSE 350 | 350 | 159 |
+  | CSI 300 | 300 | **36** |
+
+  CSI 300's attrition is severe but genuine — most excluded names simply don't have a full 2001–2026 trading
+  history (late listings on exchanges/boards that didn't exist for most of the sample window). Any CSI 300
+  result should be read with that small panel in mind.
+- **S&P 500 is the only market with an external validation signal** (the VIX index, for crisis labelling);
+  the other three markets are compared only on their own internal structure.
+
+## 3. Method, Stage by Stage
+
+1. **Correlation networks**: for each market, compute rolling-window Pearson correlation matrices at three
+   window lengths (63/132/378 trading days ≈ one quarter / half-year / 18 months), then filter each window's
+   matrix into a sparse graph three ways — a plain correlation **threshold**, a **Minimum Spanning Tree**
+   (backbone-only), and a **Triangulated Maximally Filtered Graph** (denser, still planar). The three
+   constructions are nested (threshold ⊆ MST-threshold ⊆ TMFG-threshold).
+2. **Three competing descriptors** turn each window's graph (or raw correlation matrix) into a fixed-length
+   vector:
+   - **Graph2Vec** — a learned graph embedding (Weisfeiler-Lehman relabelling + Doc2Vec), 128 dimensions.
+   - **Eigenvector centrality** — the leading eigenvector of the window's adjacency matrix; deterministic, no
+     hyperparameters.
+   - **Spectral/RMT** — 9 handcrafted features from the correlation matrix's own eigenspectrum, informed by
+     Random Matrix Theory; never builds a graph at all.
+3. **Clustering into regimes**: each descriptor's vectors are standardised, PCA-reduced, and clustered into
+   **3 regimes** (K-Means and, separately, a Gaussian Hidden Markov Model) on a training split ending
+   2019-12-31; the model is then applied out-of-sample to 2020 onward. Clusters are ranked by mean
+   correlation and labelled **Calm / Transitional / Crisis** — the highest-correlation cluster is always
+   "Crisis," so labels are comparable across methods and runs despite clustering's usual label-switching
+   problem.
+4. **Validation**: the detected Crisis regime is scored against the CBOE VIX index (VIX > 30 as the
+   independent ground truth), S&P 500 only, via precision/recall/F1.
+5. **A fourth, narrower branch** asks whether Graph2Vec's embedding *shape* is stable across the three
+   network constructions (threshold/MST/TMFG) — independent of whether it detects regimes well.
+6. **A financial application**: does trading on the detected regimes actually make money? A simple
+   regime-timed exposure strategy (100%/50%/0% by Calm/Transitional/Crisis) is backtested against
+   buy-and-hold and a cheap volatility-triggered control.
+
+## 4. Key Findings
+
+- **Correlation-network topology does carry a real, detectable regime signal** for the S&P 500 — the
+  detected Crisis periods visibly align with the GFC, the Euro debt crisis, and COVID, and this shows up
+  independently in three different places: the F1 scores against VIX, the 2-D embedding geometry (a visually
+  distinct Crisis cluster), and a purely topological analysis (network density and clique structure both
+  collapse sharply in crisis periods, with no clustering or descriptor involved at all).
+- **There is no single best descriptor — and that ambiguity is itself the headline result.** On K-Means,
+  the cheapest method (spectral/RMT, no graph, no learning) has the *highest* mean F1 (≈0.35) of the three,
+  beating Graph2Vec (≈0.31). On the Hidden Markov Model, the ranking inverts: Graph2Vec leads clearly
+  (≈0.30) while spectral collapses to F1 = 0.000 in every configuration. Which method looks "best" depends
+  entirely on which clustering algorithm it's paired with — an expensive learned representation is not
+  obviously worth its cost over much cheaper alternatives.
+- **Cross-market comparison reveals one clear anomaly**: S&P 500, Nikkei 225, and CSI 300 all show a similar
+  crisis-regime mean correlation (≈0.53–0.56), but **FTSE 350 sits far lower (≈0.35)**, with a visibly
+  noisier detected regime timeline. This is unexplained and worth investigating further — a plausible
+  candidate is that FTSE 350 is a derived panel (two independently-screened sub-indices concatenated) rather
+  than a naturally cohesive index.
+- **Detecting a regime is not the same as trading it profitably.** A regime-timed strategy built on the
+  single best-performing model cell underperforms plain buy-and-hold *and* a much simpler
+  volatility-triggered rule on both risk-adjusted return and drawdown — it sits out most of the COVID crash
+  but also most of the sharp V-shaped recovery that followed it, which is what sinks its return.
+
+## 5. Repository Structure
+
+| Path | Contents |
+|---|---|
+| `data_download_*.ipynb` | One notebook per market: scrapes constituents, downloads prices, screens the panel |
+| `data_processing.py` | Builds the rolling-window correlation networks for all markets/window lengths |
+| `networks.py` | Graph construction (threshold/MST/TMFG), correlation/distance utilities |
+| `graph2vec.py`, `eigencentrality.py`, `spectral.py` | The three descriptor implementations |
+| `modelling.py`, `sweep_common.py` | Shared clustering, regime-ranking, and validation logic |
+| `*_sweep_raw.py` (three files) | Full-grid experiment runners, one per descriptor |
+| `*_walkthrough.ipynb` (three files) | Narrower, narrative-style walkthroughs of each descriptor |
+| `embedding_geometry*.py/.py` | The embedding-shape-stability branch |
+| `network_diagnostics.ipynb` | Descriptor-free topology analysis (density, cliques, community structure) |
+| `threshold_diagnostics.ipynb` | Derives and validates the correlation threshold used in graph construction |
+| `portfolio_analysis.ipynb` | The trading-strategy backtest |
+| `data_visualisation.ipynb` | Animated visualisations of the evolving correlation networks |
+| `sweep_run.py` | Runs the full experiment pipeline end to end |
+
+`data/`, `outputs/`, and `images/` (raw/processed data, model results, figures) are not tracked in this
+repository — they are regenerable by running the pipeline below, and are large (multiple GB).
+
+## 6. Reproducing the Pipeline
+
+Requires Python 3.13 with `numpy`, `pandas`, `networkx`, `scipy`, `scikit-learn`, `hmmlearn`, `gensim`,
+`yfinance`, `joblib`, `matplotlib`.
+
+```bash
+# 1. Download and screen each market's data (run all four notebooks)
+jupyter nbconvert --to notebook --execute data_download_sp500.ipynb
+
+# 2. Build the correlation networks
+python data_processing.py
+
+# 3. Run all three descriptor sweeps + the embedding-geometry branch
+python sweep_run.py
+
+# 4. Explore results interactively via the walkthrough/diagnostic notebooks
+jupyter nbconvert --to notebook --execute modelling_walkthrough.ipynb
 ```
-"c:\Users\Abbin\miniconda3\python.exe" data_processing.py
-"c:\Users\Abbin\miniconda3\python.exe" modelling_sweep_raw.py --quick
-"c:\Users\Abbin\miniconda3\python.exe" sweep_run.py
-"c:\Users\Abbin\miniconda3\python.exe" -m jupyter nbconvert --to notebook --execute <notebook>.ipynb
-```
 
-## Pipeline, in one paragraph
+## 7. Known Limitations
 
-Four `data_download_*.ipynb` notebooks scrape/backfill each market's constituents and screen the price panels (`data/`). `data_processing.py` turns the cleaned prices into rolling-window correlation networks (raw arm only) and three window lengths, for all four markets (`outputs/*.pkl`). Three sweep scripts — `modelling_sweep_raw.py` (Graph2Vec), `eigencentrality_sweep_raw.py` (eigenvector centrality), `spectral_sweep_raw.py` (spectral/RMT) — each embed the `raw`-arm networks, cluster them (K-Means and HMM, K=3), rank clusters into Calm/Transitional/Crisis by mean correlation, and (S&P 500 only) score the Crisis regime against VIX. A fourth script, `embedding_geometry_sweep.py`, asks a different question, fixed to S&P 500/raw arm/Graph2Vec only: is the embedding's *shape* stable across the three nested network constructions (threshold/MST-threshold/TMFG-threshold), swept over all three epoch lengths? `sweep_run.py` runs all four in dependency order. Full detail: [`docs/architecture/pipeline.md`](docs/architecture/pipeline.md).
-
-## Current status
-
-The full pipeline has been run in this checkout: `data_processing.py` has produced all 12 raw-arm network-data
-pickles (`outputs/*.pkl` — 4 markets × 3 epoch lengths), and the three regime-detection sweeps plus
-`embedding_geometry_sweep.py` have all completed (`outputs/modelling_sweep_results_raw.csv` 36 rows,
-`outputs/eigencentrality_sweep_results_raw.csv` 24 rows, `outputs/spectral_sweep_results_raw.csv` 12 rows,
-`outputs/embedding_geometry_results.csv` 9 rows, backed by 72 `.joblib` bundles in `outputs/models/`), all with
-no unexpected `NaN`s (only the architecturally-expected VIX-columns-are-SP500-only pattern). `COMPILED.md` and
-`docs/critical-evaluation.md` describe results from earlier runs of this codebase — some predating the `mg`/`gr`
-arm removal, some predating the market-scope widening to four markets — and have not yet been re-verified number-
-by-number against this specific run; treat them as a record of the pipeline's known behaviours and open risks,
-not as a guarantee that every cited figure matches what's on disk right now.
-
-The three walkthrough notebooks (`modelling_walkthrough.ipynb`, `eigencentrality_walkthrough.ipynb`, `spectral_walkthrough.ipynb`) and `embedding_geometry_sweep.py` remain scoped to S&P 500 (+ Nikkei 225 for the walkthroughs) only — they were not widened alongside the three regime-detection sweep scripts' market coverage.
+- VIX-based validation only exists for the S&P 500; claims about the other three markets rest on internal
+  structural consistency, not external ground truth.
+- The correlation threshold used in graph construction was calibrated on S&P 500 data only, then applied to
+  all four markets without re-verification.
+- No formal significance testing is performed anywhere in the pipeline — sample sizes (crisis episodes, not
+  daily observations) are too small for it to be meaningful, and this is stated explicitly wherever a result
+  might otherwise look more precise than it is.
+- Graph2Vec's training is only approximately reproducible run-to-run (a property of its underlying neural
+  training procedure), so exact F1 values can drift by a few thousandths between runs; the qualitative
+  findings above are stable regardless.
