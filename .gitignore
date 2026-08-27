@@ -18,3 +18,9 @@ __pycache__/
 
 # Editor/workspace settings
 .vscode/
+
+# Internal documentation -- kept locally, not published on GitHub (README.md is the public-facing doc)
+CLAUDE.md
+COMPILED.md
+LOGIC.md
+docs/
