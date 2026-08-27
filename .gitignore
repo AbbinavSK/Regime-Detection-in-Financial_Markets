@@ -1,5 +1,4 @@
 # Pipeline artifacts -- regenerable by re-running the relevant stage (see CLAUDE.md)
-data/
 outputs/
 images/
 
