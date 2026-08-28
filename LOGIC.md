@@ -95,7 +95,7 @@ comparison depends on them being *genuinely* shared, not quietly re-implemented 
   externally verified stress episode. This limitation recurs under every branch below and is never smoothed
   over.
 
-## 4. Three Network Constructions — Nested, Not Arbitrary
+## 4. Three Network Constructions — A Shared Floor, Not a Ladder
 
 Each window's correlation matrix is filtered into a sparse graph three different ways:
 
@@ -108,10 +108,17 @@ Each window's correlation matrix is filtered into a sparse graph three different
 - **TMFG-threshold** — start from a Triangulated Maximally Filtered Graph (a denser, still-planar backbone),
   then add back the same above-threshold pairs. Always connected, and structurally richer than the MST.
 
-These three are **nested by construction** — every threshold-graph edge survives into the MST-threshold
-graph, and every MST-threshold edge survives into the TMFG-threshold graph — which is what makes it
-meaningful to ask, later, whether a finding is stable across "how much correlation structure the graph is
-allowed to keep."
+**These three are not fully nested — it is important to be precise about exactly what is and isn't
+guaranteed here.** Every threshold-graph edge survives into *both* the MST-threshold graph and the
+TMFG-threshold graph, since both are built as "backbone plus every above-threshold edge" — that part is
+nested by construction. But MST-threshold and TMFG-threshold are **not** nested with each other: a minimum
+spanning tree and a TMFG are two different algorithms selecting two different backbones (an efficient
+connecting tree vs. a planar triangulation), so the MST-threshold graph's edges are not a subset of the
+TMFG-threshold graph's, or vice versa — checked directly, the two backbones disagree on the overwhelming
+majority of windows. The correct picture is a shared floor with two separate, structurally different ways
+of building on top of it, not a single ladder of increasingly permissive constructions. This is still
+exactly what makes it meaningful to ask, later, whether a finding is stable across "which backbone the
+graph-filtering step chose" — the comparison just isn't a simple more-structure-vs-less-structure ordering.
 
 ## 5. Branch 1 — Graph2Vec: Learning What a Graph's Shape Looks Like
 
@@ -200,12 +207,14 @@ allowed to keep."
 
 Sections 5–8 are all "detect regimes, then score them" — one shared question, three descriptors, four
 markets. A fourth, narrower branch asks something structurally different: not *whether* a descriptor
-detects regimes, but whether Graph2Vec's embedding *space* keeps the same shape across the three nested
-network constructions from §4.
+detects regimes, but whether Graph2Vec's embedding *space* keeps the same shape across the three network
+constructions from §4 (which share a threshold floor but otherwise build on two structurally different
+backbones — see §4 for exactly what is and isn't nested).
 
-- **Why the nesting matters here.** An embedding shape that survives all three constructions is evidence
-  that the regime-detection signal doesn't depend on which construction the graph-filtering step chose,
-  while a shape that changes noticeably between them helps locate *where* the signal actually comes from.
+- **Why this comparison matters here.** An embedding shape that survives all three constructions is
+  evidence that the regime-detection signal doesn't depend on which construction the graph-filtering step
+  chose, while a shape that changes noticeably between them helps locate *where* the signal actually comes
+  from.
 - **Why this is narrower than the main comparison.** Only Graph2Vec is used, and only on the S&P 500 — this
   branch never needed eigenvector centrality's connectivity requirement, which is precisely what makes it
   possible to include the plain threshold construction here, unlike in §6. The distance metric (cosine) and
