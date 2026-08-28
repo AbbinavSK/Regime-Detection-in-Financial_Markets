@@ -5,6 +5,11 @@ Zlicar, Prof. Fabio Caccioli). This project asks whether the *shape* of the stoc
 structure — not just individual prices — can be used to detect market regimes (calm, transitional, crisis),
 and whether a sophisticated machine-learned representation of that structure is actually worth its cost.
 
+**For the full reasoning behind every methodological choice below — why raw correlation only, why three
+descriptors, why a causal split, why two clustering algorithms, why the financial backtest exists — see
+[`LOGIC.md`](LOGIC.md).** This document covers what the project is and what it found; `LOGIC.md` covers why
+it is built the way it is.
+
 ## 1. The Research Question
 
 - **Surface question**: can market regimes be read off the evolving topology of a stock correlation network?
@@ -38,6 +43,8 @@ and whether a sophisticated machine-learned representation of that structure is 
 
 ## 3. Method, Stage by Stage
 
+*(see [`LOGIC.md`](LOGIC.md) for why each of these choices was made)*
+
 1. **Correlation networks**: for each market, compute rolling-window Pearson correlation matrices at three
    window lengths (63/132/378 trading days ≈ one quarter / half-year / 18 months), then filter each window's
    matrix into a sparse graph three ways — a plain correlation **threshold**, a **Minimum Spanning Tree**
@@ -60,9 +67,9 @@ and whether a sophisticated machine-learned representation of that structure is 
    independent ground truth), S&P 500 only, via precision/recall/F1.
 5. **A fourth, narrower branch** asks whether Graph2Vec's embedding *shape* is stable across the three
    network constructions (threshold/MST/TMFG) — independent of whether it detects regimes well.
-6. **A financial application**: does trading on the detected regimes actually make money? A simple
-   regime-timed exposure strategy (100%/50%/0% by Calm/Transitional/Crisis) is backtested against
-   buy-and-hold and a cheap volatility-triggered control.
+6. **A financial application**: does trading on the detected regimes actually make money? A regime-timed
+   exposure strategy (100%/50%/0% by Calm/Transitional/Crisis) is backtested against buy-and-hold and a
+   cheap volatility-triggered control.
 
 ## 4. Key Findings
 
@@ -91,22 +98,23 @@ and whether a sophisticated machine-learned representation of that structure is 
 
 | Path | Contents |
 |---|---|
-| `data_download_*.ipynb` | One notebook per market: scrapes constituents, downloads prices, screens the panel |
-| `data_processing.py` | Builds the rolling-window correlation networks for all markets/window lengths |
+| `LOGIC.md` | The full reasoning behind the project's design — start here for "why," not just "what" |
+| `data_download_*.ipynb` (4 notebooks) | One per market: scrapes constituents, downloads prices, screens the panel |
+| `data/` | Raw and cleaned adjusted-close price panels for all four markets, plus the VIX series |
+| `data_processing.py` | Builds the rolling-window correlation networks for every market and window length |
 | `networks.py` | Graph construction (threshold/MST/TMFG), correlation/distance utilities |
 | `graph2vec.py`, `eigencentrality.py`, `spectral.py` | The three descriptor implementations |
-| `modelling.py`, `sweep_common.py` | Shared clustering, regime-ranking, and validation logic |
-| `*_sweep_raw.py` (three files) | Full-grid experiment runners, one per descriptor |
-| `*_walkthrough.ipynb` (three files) | Narrower, narrative-style walkthroughs of each descriptor |
-| `embedding_geometry*.py/.py` | The embedding-shape-stability branch |
+| `modelling.py`, `sweep_common.py` | Shared clustering, regime-ranking, and validation logic used identically by all three descriptors |
+| `plot_style.py` | Single shared source of figure styling (colours, fonts, export settings) |
+| `modelling_sweep_raw.py`, `eigencentrality_sweep_raw.py`, `spectral_sweep_raw.py` | Full-grid experiment runners, one per descriptor |
+| `modelling_walkthrough.ipynb`, `eigencentrality_walkthrough.ipynb`, `spectral_walkthrough.ipynb` | Narrower, narrative-style walkthroughs of each descriptor |
+| `embedding_geometry.py`, `embedding_geometry_sweep.py` | The embedding-shape-stability branch (§3, point 5) |
 | `network_diagnostics.ipynb` | Descriptor-free topology analysis (density, cliques, community structure) |
 | `threshold_diagnostics.ipynb` | Derives and validates the correlation threshold used in graph construction |
-| `portfolio_analysis.ipynb` | The trading-strategy backtest |
-| `data_visualisation.ipynb` | Animated visualisations of the evolving correlation networks |
-| `sweep_run.py` | Runs the full experiment pipeline end to end |
-
-`data/`, `outputs/`, and `images/` (raw/processed data, model results, figures) are not tracked in this
-repository — they are regenerable by running the pipeline below, and are large (multiple GB).
+| `portfolio_analysis.ipynb` | The trading-strategy backtest (§3, point 6) |
+| `sweep_run.py` | Runs the three descriptor sweeps and the embedding-geometry branch end to end |
+| `outputs/` | Results CSVs, spectral-feature/distance pickles, and transition-matrix pickles. The raw network-data pickles and fitted model bundles are excluded from version control — they're regenerable by running the pipeline below, and individually exceed GitHub's file-size limit |
+| `images/` | All figures produced by the sweep scripts and diagnostic notebooks |
 
 ## 6. Reproducing the Pipeline
 
