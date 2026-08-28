@@ -48,8 +48,12 @@ it is built the way it is.
 1. **Correlation networks**: for each market, compute rolling-window Pearson correlation matrices at three
    window lengths (63/132/378 trading days ≈ one quarter / half-year / 18 months), then filter each window's
    matrix into a sparse graph three ways — a plain correlation **threshold**, a **Minimum Spanning Tree**
-   (backbone-only), and a **Triangulated Maximally Filtered Graph** (denser, still planar). The three
-   constructions are nested (threshold ⊆ MST-threshold ⊆ TMFG-threshold).
+   backbone plus the same above-threshold edges (**MST-threshold**), and a **Triangulated Maximally Filtered
+   Graph** backbone plus the same above-threshold edges (**TMFG-threshold**). The threshold construction is
+   nested inside *both* of the others (threshold ⊆ MST-threshold and threshold ⊆ TMFG-threshold, since both
+   are built as "backbone + every above-threshold edge"), but MST-threshold and TMFG-threshold are **not**
+   nested with each other — their backbones are two different edge sets (a spanning tree vs. a planar
+   triangulation), so neither construction's edges are a subset of the other's.
 2. **Three competing descriptors** turn each window's graph (or raw correlation matrix) into a fixed-length
    vector:
    - **Graph2Vec** — a learned graph embedding (Weisfeiler-Lehman relabelling + Doc2Vec), 128 dimensions.
@@ -68,8 +72,9 @@ it is built the way it is.
 5. **A fourth, narrower branch** asks whether Graph2Vec's embedding *shape* is stable across the three
    network constructions (threshold/MST/TMFG) — independent of whether it detects regimes well.
 6. **A financial application**: does trading on the detected regimes actually make money? A regime-timed
-   exposure strategy (100%/50%/0% by Calm/Transitional/Crisis) is backtested against buy-and-hold and a
-   cheap volatility-triggered control.
+   exposure strategy (100%/50%/0% by Calm/Transitional/Crisis) is backtested against buy-and-hold, judged
+   against a criterion fixed in advance: beat buy-and-hold on both risk-adjusted return and maximum
+   drawdown.
 
 ## 4. Key Findings
 
@@ -80,25 +85,30 @@ it is built the way it is.
   collapse sharply in crisis periods, with no clustering or descriptor involved at all).
 - **There is no single best descriptor — and that ambiguity is itself the headline result.** On K-Means,
   the cheapest method (spectral/RMT, no graph, no learning) has the *highest* mean F1 (≈0.35) of the three,
-  beating Graph2Vec (≈0.31). On the Hidden Markov Model, the ranking inverts: Graph2Vec leads clearly
-  (≈0.30) while spectral collapses to F1 = 0.000 in every configuration. Which method looks "best" depends
+  beating Graph2Vec (≈0.30). On the Hidden Markov Model, the ranking inverts: Graph2Vec leads clearly
+  (≈0.29) while spectral collapses to F1 = 0.000 in every configuration. Which method looks "best" depends
   entirely on which clustering algorithm it's paired with — an expensive learned representation is not
   obviously worth its cost over much cheaper alternatives.
 - **Cross-market comparison reveals one clear anomaly**: S&P 500, Nikkei 225, and CSI 300 all show a similar
-  crisis-regime mean correlation (≈0.53–0.56), but **FTSE 350 sits far lower (≈0.35)**, with a visibly
+  crisis-regime mean correlation (≈0.53–0.55), but **FTSE 350 sits far lower (≈0.34)**, with a visibly
   noisier detected regime timeline. This is unexplained and worth investigating further — a plausible
   candidate is that FTSE 350 is a derived panel (two independently-screened sub-indices concatenated) rather
   than a naturally cohesive index.
-- **Detecting a regime is not the same as trading it profitably.** A regime-timed strategy built on the
-  single best-performing model cell underperforms plain buy-and-hold *and* a much simpler
-  volatility-triggered rule on both risk-adjusted return and drawdown — it sits out most of the COVID crash
-  but also most of the sharp V-shaped recovery that followed it, which is what sinks its return.
+- **Detecting a regime is not the same as trading it profitably — and the reason why is precise.** Judged
+  against a criterion fixed before any number was computed (beat buy-and-hold on both risk-adjusted return
+  *and* maximum drawdown, over the full test period), a regime-timed strategy on the single
+  best-performing model cell fails: it cuts maximum drawdown sharply (−17.3% vs. buy-and-hold's −37.3%) by
+  reducing exposure in detected Crisis periods, but its Sharpe ratio (0.38) falls well short of
+  buy-and-hold's (0.68). That shortfall is driven almost entirely by one episode — excluding COVID, the
+  regime-timed strategy actually wins on *both* metrics, because most of its underperformance comes from
+  sitting out the market's sharp V-shaped recovery immediately after the crash, not the crash itself.
 
 ## 5. Repository Structure
 
 | Path | Contents |
 |---|---|
 | `LOGIC.md` | The full reasoning behind the project's design — start here for "why," not just "what" |
+| `report.pdf` | The compiled dissertation |
 | `data_download_*.ipynb` (4 notebooks) | One per market: scrapes constituents, downloads prices, screens the panel |
 | `data/` | Raw and cleaned adjusted-close price panels for all four markets, plus the VIX series |
 | `data_processing.py` | Builds the rolling-window correlation networks for every market and window length |
