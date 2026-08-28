@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 
 from networks import load_arm
 from modelling import split_train_test
-from plot_style import set_publication_style, save_figure, style_axis, mark_split, REGIME_PALETTE, NEUTRAL_COLOURS
+from plot_style import set_publication_style, save_figure, style_axis, mark_split, REGIME_PALETTE
 import embedding_geometry as eg
 
 # Fixed to one market/arm/descriptor (S&P 500, raw, Graph2Vec, cosine, 2-D MDS) with EPOCH_LENGTHS and GRAPH_TYPES swept -- see docs/math/embedding-geometry.md.
@@ -38,11 +38,11 @@ def _bundle_tag(epoch_length, graph_type):
     return f"{INDEX_CODE}_raw_{epoch_length}d_{graph_type}"
 
 
-# Save a figure into one epoch_length's images subfolder and close it. Dashboard diagnostics stay at 150dpi -- see docs/plot_style.md.
+# Save a figure into one epoch_length's images subfolder and close it. Manuscript-destined, so the 600dpi save_figure default applies -- see docs/plot_style.md.
 def _savefig(fig, tag, name):
     combo_dir = os.path.join(IMAGES_DIR, tag)
     os.makedirs(combo_dir, exist_ok=True)
-    save_figure(fig, os.path.join(combo_dir, name), dpi=150)
+    save_figure(fig, os.path.join(combo_dir, name))
     plt.close(fig)
 
 
@@ -70,7 +70,7 @@ def _set_index_date_ticks(ax, dates, interval_years=2):
 
 # Draw one self-similarity heatmap panel with date ticks and the train/test split marked on both axes.
 def _plot_selfsimilarity_panel(ax, D, dates, n_train, vmin, vmax):
-    im = ax.imshow(D, cmap="viridis", vmin=vmin, vmax=vmax, aspect="auto")
+    im = ax.imshow(D, cmap="turbo", vmin=vmin, vmax=vmax, aspect="auto")
     _set_index_date_ticks(ax, dates)
     style_axis(ax)
     if 0 < n_train < len(dates):
@@ -80,12 +80,11 @@ def _plot_selfsimilarity_panel(ax, D, dates, n_train, vmin, vmax):
     return im
 
 
-# Draw the self-similarity row: one panel per graph_type, one shared colour scale and colourbar for the whole figure.
+# Draw the self-similarity row (linear cmap="turbo" over cosine distance's fixed [0,2] range, no white): one panel per graph_type, one shared colour scale and colourbar for the whole figure.
 def _plot_selfsimilarity_figure(distances_by_graph_type, dates_by_graph_type, n_train_by_graph_type, graph_types):
     fig, axes = _new_axes_row(len(graph_types))
     try:
-        vmin = min(D.min() for D in distances_by_graph_type.values())
-        vmax = max(D.max() for D in distances_by_graph_type.values())
+        vmin, vmax = 0.0, 2.0
         images = []
         for col, graph_type in enumerate(graph_types):
             D = distances_by_graph_type[graph_type]
@@ -98,11 +97,8 @@ def _plot_selfsimilarity_figure(distances_by_graph_type, dates_by_graph_type, n_
     return fig
 
 
-# Draw one 2-D MDS scatter panel coloured by the given colouring, with the graph_type name and the fit's stress in the title.
-def _plot_mds_panel(ax, coords, colour_values, stress, colour_kind, cmap, vmin, vmax, graph_type):
-    if colour_kind == "date":
-        ax.plot(coords[:, 0], coords[:, 1], color=NEUTRAL_COLOURS["primary"], linewidth=0.5, alpha=0.3, zorder=1)
-
+# Draw one 2-D MDS scatter panel coloured by the given colouring, titled with just the graph_type name.
+def _plot_mds_panel(ax, coords, colour_values, colour_kind, cmap, vmin, vmax, graph_type):
     if colour_kind == "regime":
         for regime_id, name, hexcolour in zip(range(3), REGIME_NAMES, REGIME_PALETTE):
             mask = colour_values == regime_id
@@ -113,13 +109,13 @@ def _plot_mds_panel(ax, coords, colour_values, stress, colour_kind, cmap, vmin, 
 
     ax.set_xlabel("MDS Dimension 1")
     ax.set_ylabel("MDS Dimension 2")
-    ax.set_title(f"{GRAPH_TYPE_LABELS[graph_type]} (stress={stress:.3f})", fontweight="bold")
+    ax.set_title(GRAPH_TYPE_LABELS[graph_type], fontweight="bold")
     style_axis(ax, grid=True)
     return sc
 
 
 # Draw one 2-D MDS figure for one colouring: one graph_type panel per column, sharing one colour scale.
-def _plot_mds_figure(coords_by_graph_type, colour_values_by_graph_type, stress_by_graph_type, colour_kind, graph_types, colourbar_label=None):
+def _plot_mds_figure(coords_by_graph_type, colour_values_by_graph_type, colour_kind, graph_types, colourbar_label=None):
     fig, axes = _new_axes_row(len(graph_types))
 
     try:
@@ -132,12 +128,14 @@ def _plot_mds_figure(coords_by_graph_type, colour_values_by_graph_type, stress_b
         last_sc = None
         for ax, graph_type in zip(axes, graph_types):
             sc = _plot_mds_panel(ax, coords_by_graph_type[graph_type], colour_values_by_graph_type[graph_type],
-                                  stress_by_graph_type[graph_type], colour_kind, cmap, vmin, vmax, graph_type)
+                                  colour_kind, cmap, vmin, vmax, graph_type)
             if sc is not None:
                 last_sc = sc
 
         if colour_kind == "regime":
-            axes[0].legend(loc="best", frameon=True, facecolor="white", edgecolor="lightgray")
+            handles, labels = axes[0].get_legend_handles_labels()
+            fig.legend(handles, labels, loc="center left", bbox_to_anchor=(1.0, 0.5),
+                       frameon=True, facecolor="white", edgecolor="lightgray")
         elif last_sc is not None:
             fig.colorbar(last_sc, ax=list(axes), shrink=0.7, label=colourbar_label)
     except Exception:
@@ -247,13 +245,12 @@ def _run_epoch_length(epoch_length, train, test, dates, n_train, graph_types):
         rows_by_gt[gt]["stress"] = float(stress_by_gt[gt])
 
     colourings = {
-        "date": ({gt: np.arange(len(dates_by_gt[gt])) for gt in ok_graph_types}, "window index"),
         "regime": ({gt: entries[gt]["regime_labels"] for gt in ok_graph_types}, None),
         "edgecount": ({gt: np.array(entries[gt]["edge_counts"]) for gt in ok_graph_types}, "edge count"),
         "oov": ({gt: np.array(entries[gt]["oov"]) for gt in ok_graph_types}, "OOV rate"),
     }
     for colour_kind, (colour_values, label) in colourings.items():
-        fig = _plot_mds_figure(coords_by_gt, colour_values, stress_by_gt, colour_kind, ok_graph_types, colourbar_label=label)
+        fig = _plot_mds_figure(coords_by_gt, colour_values, colour_kind, ok_graph_types, colourbar_label=label)
         _savefig(fig, tag, f"geometry_mds_graph2vec_{colour_kind}.png")
 
     return list(rows_by_gt.values()), failed

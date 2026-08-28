@@ -24,7 +24,7 @@ def threshold_graph(C, D, stock_names, threshold):
     G.add_nodes_from(stock_names)
     for i in range(len(stock_names)):
         for j in range(i + 1, len(stock_names)):
-            if C[i, j] > threshold:
+            if C[i, j] >= threshold:
                 G.add_edge(stock_names[i], stock_names[j], weight=float(D[i, j]), edge_type="threshold")
     return G
 
@@ -44,12 +44,12 @@ def mst_threshold_graph(C, D, stock_names, threshold):
     G = mst_graph(D, stock_names)
     for i in range(len(stock_names)):
         for j in range(i + 1, len(stock_names)):
-            if C[i, j] > threshold and not G.has_edge(stock_names[i], stock_names[j]):
+            if C[i, j] >= threshold and not G.has_edge(stock_names[i], stock_names[j]):
                 G.add_edge(stock_names[i], stock_names[j], weight=float(D[i, j]), edge_type="threshold")
     return G
 
 
-# Triangulated Maximally Filtered Graph (Massara/Aste), sign-preserving raw-correlation gain, lazy priority-queue updates.
+# Triangulated Maximally Filtered Graph (Massara/Aste).
 def tmfg_graph(C, D, stock_names):
     n = len(stock_names)
     W = C.copy()
@@ -87,33 +87,33 @@ def tmfg_graph(C, D, stock_names):
 
     pq = []
     for ti, tri in enumerate(triangles):
-        g, vtx = best_gain(tri)
-        heapq.heappush(pq, (-g, vtx, ti))
+        gain, vertex = best_gain(tri)
+        heapq.heappush(pq, (-gain, vertex, ti))
 
     inserted = 0
     while inserted < n - 4:
-        neg_g, nv, nt = heapq.heappop(pq)
-        if placed[nv]:
-            g, vtx = best_gain(triangles[nt])
-            heapq.heappush(pq, (-g, vtx, nt))
+        _, new_vertex, triangle_index = heapq.heappop(pq)
+        if placed[new_vertex]:
+            gain, vertex = best_gain(triangles[triangle_index])
+            heapq.heappush(pq, (-gain, vertex, triangle_index))
             continue
 
-        tri = triangles[nt]
-        for u in tri:
-            add_edge(nv, u)
-        placed[nv] = True
+        triangle = triangles[triangle_index]
+        for vertex in triangle:
+            add_edge(new_vertex, vertex)
+        placed[new_vertex] = True
         inserted += 1
 
-        triangles[nt] = [tri[0], tri[1], nv]
-        triangles.append([tri[0], tri[2], nv])
-        triangles.append([tri[1], tri[2], nv])
+        triangles[triangle_index] = [triangle[0], triangle[1], new_vertex]
+        triangles.append([triangle[0], triangle[2], new_vertex])
+        triangles.append([triangle[1], triangle[2], new_vertex])
 
-        for ti in (nt, len(triangles) - 2, len(triangles) - 1):
-            g, vtx = best_gain(triangles[ti])
-            heapq.heappush(pq, (-g, vtx, ti))
+        updated_triangles = (triangle_index, len(triangles) - 2, len(triangles) - 1)
+        for ti in updated_triangles:
+            gain, vertex = best_gain(triangles[ti])
+            heapq.heappush(pq, (-gain, vertex, ti))
 
     return G
-
 
 # TMFG backbone unioned with all above-threshold edges (additive; floors at 3(n-2)).
 def tmfg_threshold_graph(C, D, stock_names, threshold):
@@ -121,7 +121,7 @@ def tmfg_threshold_graph(C, D, stock_names, threshold):
     n = len(stock_names)
     for a in range(n):
         for b in range(a + 1, n):
-            if C[a, b] > threshold and not G.has_edge(stock_names[a], stock_names[b]):
+            if C[a, b] >= threshold and not G.has_edge(stock_names[a], stock_names[b]):
                 G.add_edge(stock_names[a], stock_names[b], weight=float(D[a, b]), edge_type="threshold")
     return G
 
@@ -146,7 +146,7 @@ def rolling_correlations(df_logreturns, epoch_length, epoch_shift=22):
     stock_names = df_logreturns.columns[1:].tolist()
     correlation_matrices = []
     epoch_dates = []
-    for i in range(0, len(df_logreturns) - epoch_length, epoch_shift):
+    for i in range(0, len(df_logreturns) - epoch_length + 1, epoch_shift):
         epoch = df_logreturns.iloc[i:i + epoch_length]
         correlation_matrices.append(epoch.iloc[:, 1:].corr().values)
         epoch_dates.append(epoch["Date"].iloc[-1])

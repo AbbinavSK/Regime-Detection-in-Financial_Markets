@@ -30,9 +30,9 @@ def _wl_graph_features(G: nx.Graph, wl_iterations: int) -> list[str]:
 class Graph2Vec:
     def __init__(
         self,
-        wl_iterations : int   = 2,
+        wl_iterations : int   = 3,
         dimensions    : int   = 128,
-        epochs        : int   = 10,
+        epochs        : int   = 100,
         learning_rate : float = 0.025,
         min_count     : int   = 5,
         down_sampling : float = 0.0001,

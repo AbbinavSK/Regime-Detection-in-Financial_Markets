@@ -1,6 +1,8 @@
-# Pipeline artifacts -- regenerable by re-running the relevant stage (see CLAUDE.md)
-outputs/
-images/
+# Raw network-data pickles and fitted model bundles -- too large for GitHub (individual files exceed
+# the 100MB hard limit); results CSVs, spectral-feature/distance pickles, and transition-matrix
+# pickles in outputs/ stay tracked.
+outputs/*_raw_network_data_*.pkl
+outputs/models/
 
 # Overleaf-synced report repo -- version-controlled separately via its own git remote
 report/
