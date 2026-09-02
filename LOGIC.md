@@ -134,11 +134,15 @@ graph-filtering step chose" — the comparison just isn't a simple more-structur
 - **Fitting and inferring are not the same operation.** A training window's embedding falls directly out of
   the model once training converges. A test window's embedding is a *separate optimisation problem* run
   against the already-frozen, trained vocabulary — and any structural feature that never made the frequency
-  cut during training is silently dropped, not approximated. This is not a small effect in practice: on
-  real data, an average of roughly 48% of a training window's own structural features already miss the
-  vocabulary cut, rising to around 51% at test time. This asymmetry does not invalidate comparisons against
-  the other two descriptors, but it does mean Graph2Vec's held-out performance carries a real, structural
-  handicap that the other two descriptors don't share (§8).
+  cut during training is silently dropped, not approximated. This is not a small effect in practice: on the
+  S&P 500, the mean test-period out-of-vocabulary rate ranges from 33.0% (plain threshold, T=378) to 71.0%
+  (TMFG-threshold, T=378): it falls as the window lengthens for the threshold and MST-threshold constructions
+  (more history per window sharpens the retained vocabulary), while staying roughly flat — if anything,
+  drifting slightly higher — for TMFG-threshold, and it is highest overall for whichever construction's
+  backbone adds the most local structure (TMFG's cycles and triangles produce a wider range of
+  rooted-subgraph features than the MST's tree). This asymmetry does not invalidate
+  comparisons against the other two descriptors, but it does mean Graph2Vec's held-out performance carries a
+  real, structural handicap that the other two descriptors don't share (§8).
 - **Reproducibility is only approximate.** Even with every explicit random seed fixed, the underlying
   training procedure is multi-threaded and only approximately reproducible — two runs of the identical
   configuration can differ by a single predicted-regime window, moving a reported accuracy score in the
@@ -234,19 +238,30 @@ the detected regimes, would you make money?
 - **Why K-means and not the HMM here.** The HMM's causal decoding re-runs on every growing prefix of the
   test data, which is appropriate for retrospective validation but not directly usable as a live daily
   exposure signal without further adaptation — so it is excluded here on principle, not convenience.
-- **Why a volatility-triggered control exists.** Alongside buy-and-hold, the backtest includes a much
-  simpler rule (reduce exposure when trailing realised volatility crosses a threshold learned from training
-  data only) specifically so that any apparent edge from the whole network-based pipeline can be checked
-  against what a single cheap scalar signal achieves on its own.
+- **Why the equity sleeve is bought once and never rebalanced.** Both strategies hold one identical
+  equal-weight stock basket, purchased on the first day of the test period and left to drift with each
+  stock's own compounding return for the rest of the window; the two strategies differ *only* in how much of
+  that one basket versus cash each holds at any point. Rebalancing the basket itself would introduce a
+  second, independent source of turnover, which would make it harder to attribute any performance difference
+  cleanly to the exposure-timing decision — the one thing this backtest exists to isolate.
+- **Why idle cash earns a flat assumed rate, not a downloaded series.** Capital not allocated to equity is
+  assumed to earn a constant 2.5%/year rather than a live 13-week T-bill series. This keeps the backtest
+  self-contained within the single price panel already in use, instead of adding a second external data
+  dependency purely to model a few percentage points of cash drag.
+- **Why transaction costs are excluded.** The backtest reports gross returns throughout for both strategies;
+  no cost schedule is assumed for either strategy's turnover.
 - **Why no significance test is computed.** The effective sample size here is a handful of distinct crisis
   episodes, not the number of trading days — a p-value computed on daily returns would misrepresent how
   much evidence is actually present. Dispersion is instead estimated with a block bootstrap sized to match
   the correlation window length.
-- **The verdict is stated plainly, not softened.** Against a criterion fixed before any number was
-  computed, the regime-timed strategy does not beat both a risk-adjusted-return benchmark and a
-  drawdown benchmark simultaneously — detecting a regime and profiting from trading it are shown here to be
-  two different claims, and the project treats that as a real finding, not a disappointing footnote to
-  qualify away.
+- **The verdict is stated plainly, not softened.** Against the criterion fixed before any number was
+  computed, the regime-timed strategy fails over the full test period: it does cut maximum drawdown sharply,
+  but its Sharpe ratio falls well short of buy-and-hold's. Because the criterion was fixed to hold over the
+  *full* period, the fact that the strategy would have passed on the data with COVID-19 excluded (its Sharpe
+  ratio there slightly exceeds buy-and-hold's, while the drawdown advantage survives unchanged) does not
+  overturn the headline result — it just locates where the shortfall comes from. Detecting a regime and
+  profiting from trading it are shown here to be two different claims, and the project treats that as a real
+  finding, not a disappointing footnote to qualify away.
 
 ## 11. What Was Tried and Not Pursued
 

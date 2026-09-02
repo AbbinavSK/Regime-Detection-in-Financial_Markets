@@ -72,9 +72,13 @@ it is built the way it is.
 5. **A fourth, narrower branch** asks whether Graph2Vec's embedding *shape* is stable across the three
    network constructions (threshold/MST/TMFG) — independent of whether it detects regimes well.
 6. **A financial application**: does trading on the detected regimes actually make money? A regime-timed
-   exposure strategy (100%/50%/0% by Calm/Transitional/Crisis) is backtested against buy-and-hold, judged
-   against a criterion fixed in advance: beat buy-and-hold on both risk-adjusted return and maximum
-   drawdown.
+   exposure strategy (100%/50%/0% by Calm/Transitional/Crisis) is backtested against a fully-invested
+   buy-and-hold benchmark on one pre-nominated configuration (S&P 500, T=132, MST-threshold, Graph2Vec,
+   K-means), judged against a criterion fixed in advance: beat buy-and-hold on both Sharpe ratio and maximum
+   drawdown, with both advantages persisting once the COVID-19 episode is excluded. Both strategies hold the
+   same equal-weight stock basket, bought once on the first test-period day and never rebalanced — they
+   differ only in how much of that basket versus cash each holds — and idle cash is assumed to earn a flat
+   2.5%/year rather than a downloaded rate series. No transaction costs are modelled.
 
 ## 4. Key Findings
 
@@ -84,24 +88,28 @@ it is built the way it is.
   distinct Crisis cluster), and a purely topological analysis (network density and clique structure both
   collapse sharply in crisis periods, with no clustering or descriptor involved at all).
 - **There is no single best descriptor — and that ambiguity is itself the headline result.** On K-Means,
-  the cheapest method (spectral/RMT, no graph, no learning) has the *highest* mean F1 (≈0.35) of the three,
-  beating Graph2Vec (≈0.30). On the Hidden Markov Model, the ranking inverts: Graph2Vec leads clearly
-  (≈0.29) while spectral collapses to F1 = 0.000 in every configuration. Which method looks "best" depends
-  entirely on which clustering algorithm it's paired with — an expensive learned representation is not
-  obviously worth its cost over much cheaper alternatives.
-- **Cross-market comparison reveals one clear anomaly**: S&P 500, Nikkei 225, and CSI 300 all show a similar
-  crisis-regime mean correlation (≈0.53–0.55), but **FTSE 350 sits far lower (≈0.34)**, with a visibly
-  noisier detected regime timeline. This is unexplained and worth investigating further — a plausible
-  candidate is that FTSE 350 is a derived panel (two independently-screened sub-indices concatenated) rather
-  than a naturally cohesive index.
+  the cheapest method (spectral/RMT, no graph, no learning) has the *highest* mean F1 (0.350) of the three,
+  beating Graph2Vec (0.315) and eigenvector centrality (0.277). On the Hidden Markov Model, the ranking
+  inverts: Graph2Vec leads clearly (0.287) while spectral collapses to F1 = 0.000 in every configuration.
+  Which method looks "best" depends entirely on which clustering algorithm it's paired with — an expensive
+  learned representation is not obviously worth its cost over much cheaper alternatives.
+- **Cross-market generalisation is real but not uniform, and CSI 300 is the clearest failure case.** Nikkei
+  225 most closely resembles the S&P 500 (persistent Calm/Crisis blocks under both clustering methods). FTSE
+  350 is markedly more sensitive to the choice of clustering method — its K-means self-transition
+  probabilities are noticeably lower (e.g. 0.676 for Calm) than its HMM ones (all three regimes above 0.82).
+  CSI 300 is the standout anomaly: under the HMM, its test period collapses to 156 Calm windows, 2
+  Transitional windows, and **zero** Crisis windows — the model does not recover a meaningful three-regime
+  structure out of sample at all. Its 36-stock final panel (after screening removed 88% of the original CSI
+  300 constituents for incomplete history) is the leading suspect.
 - **Detecting a regime is not the same as trading it profitably — and the reason why is precise.** Judged
-  against a criterion fixed before any number was computed (beat buy-and-hold on both risk-adjusted return
-  *and* maximum drawdown, over the full test period), a regime-timed strategy on the single
-  best-performing model cell fails: it cuts maximum drawdown sharply (−17.3% vs. buy-and-hold's −37.3%) by
-  reducing exposure in detected Crisis periods, but its Sharpe ratio (0.38) falls well short of
-  buy-and-hold's (0.68). That shortfall is driven almost entirely by one episode — excluding COVID, the
-  regime-timed strategy actually wins on *both* metrics, because most of its underperformance comes from
-  sitting out the market's sharp V-shaped recovery immediately after the crash, not the crash itself.
+  against a criterion fixed before any number was computed (beat buy-and-hold on both Sharpe ratio *and*
+  maximum drawdown, over the full test period, with both advantages persisting ex-COVID), the regime-timed
+  strategy on the single pre-nominated configuration **fails**: it cuts maximum drawdown from −37.1% to
+  −18.9% by reducing exposure in detected Crisis periods, but its Sharpe ratio (0.450) falls well short of
+  buy-and-hold's (0.724). That shortfall is driven almost entirely by one episode — excluding COVID, the
+  regime-timed strategy's Sharpe ratio (0.477) actually exceeds buy-and-hold's (0.454), while the drawdown
+  advantage survives unchanged, because most of the full-period underperformance comes from sitting out the
+  market's sharp V-shaped recovery immediately after the crash, not the crash itself.
 
 ## 5. Repository Structure
 
